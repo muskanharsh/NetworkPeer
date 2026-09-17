@@ -249,7 +249,6 @@ private fun AuthScreen(container: AppContainer) {
     var roleName by rememberSaveable { mutableStateOf(UserRole.WORKER.name) }
     var otpRequested by rememberSaveable { mutableStateOf(false) }
     var challengeId by rememberSaveable { mutableStateOf("") }
-    var devOtp by rememberSaveable { mutableStateOf<String?>(null) }
     var deliveryNote by rememberSaveable { mutableStateOf<String?>(null) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
@@ -260,7 +259,6 @@ private fun AuthScreen(container: AppContainer) {
         otpRequested = false
         otp = ""
         challengeId = ""
-        devOtp = null
         deliveryNote = null
         error = null
     }
@@ -308,7 +306,6 @@ private fun AuthScreen(container: AppContainer) {
         )
         otpRequested = true
         challengeId = result.challengeId
-        devOtp = result.otp ?: "123456"
         otp = ""
         deliveryNote = if (result.message.isNotBlank()) result.message else "Verification code dispatched to $trimmedEmail."
     }
@@ -703,34 +700,6 @@ private fun AuthScreen(container: AppContainer) {
                                     unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                                 ),
                             )
-
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = Color(0xFFFEF3C7),
-                                border = BorderStroke(1.dp, Color(0xFFF59E0B)),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { otp = devOtp ?: "123456" },
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        text = "Development OTP: ${devOtp ?: "123456"}",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = Color(0xFF92400E),
-                                        fontWeight = FontWeight.Bold,
-                                    )
-                                    Text(
-                                        text = "Tap to fill",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFFB45309),
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                }
-                            }
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),

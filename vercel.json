@@ -3,7 +3,7 @@
   "framework": "tanstack-start",
   "installCommand": "npm ci --include=dev",
   "buildCommand": "NITRO_PRESET=vercel npm run build",
-  "outputDirectory": "NetworkPeer-platform-main/.vercel/output",
+  "outputDirectory": "apps/web/.vercel/output",
   "rewrites": [
     {
       "source": "/api/v1/:path*",

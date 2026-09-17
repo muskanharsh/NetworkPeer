@@ -35,7 +35,6 @@ export type PendingOtp = {
   role: Role;
   otpLength: number;
   challengeId?: string;
-  developmentOtp?: string;
   fullName?: string;
   mobileNumber?: string;
 };
@@ -94,29 +93,15 @@ function AuthPage() {
         role,
         challengeId: result.challenge_id ?? result.challengeId,
         otpLength: result.otp_length ?? result.otpLength ?? 6,
-        developmentOtp: result.otp || "123456",
         fullName: trimmedName || undefined,
         mobileNumber: parsedMobile || undefined,
       };
       window.sessionStorage.setItem(PENDING_OTP_KEY, JSON.stringify(pending));
-      toast.success(
-        result.otp ? `Verification code sent! (Code: ${result.otp})` : "Verification code sent to your email",
-      );
+      toast.success("Verification code sent to your email");
       await router.navigate({ to: "/auth/verify" });
-    } catch {
-      const fallbackPending: PendingOtp = {
-        type: "email",
-        email: trimmedEmail,
-        displayTarget: trimmedEmail,
-        role,
-        otpLength: 6,
-        developmentOtp: "123456",
-        fullName: trimmedName || undefined,
-        mobileNumber: parsedMobile || undefined,
-      };
-      window.sessionStorage.setItem(PENDING_OTP_KEY, JSON.stringify(fallbackPending));
-      toast.info("Verification code sent! (Use 123456 to verify)");
-      await router.navigate({ to: "/auth/verify" });
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : "Could not send verification code";
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

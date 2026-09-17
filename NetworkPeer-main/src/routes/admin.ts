@@ -36,6 +36,10 @@ const overrideBodySchema = z.object({
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["worker_id"], message: "worker_id is required for REASSIGN" });
   }
 });
+const refundBodySchema = z.object({
+  reason: z.string().trim().min(3).max(2_000),
+  idempotency_key: z.string().trim().min(8).max(180),
+}).strict();
 const userQuerySchema = z.object({
   role: z.enum(["CLIENT", "WORKER"]).optional(),
   is_active: z.enum(["true", "false"]).transform((value) => value === "true").optional(),
@@ -90,6 +94,24 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
           targetWorkerId: body.data.worker_id,
           reason: body.data.reason,
           cancellationReason: body.data.cancellation_reason,
+        }));
+      } catch (err) {
+        return handleAdminError(request, reply, err);
+      }
+    });
+
+    child.post("/admin/jobs/:jobId/refund", async (request, reply) => {
+      const params = jobParamsSchema.safeParse(request.params);
+      const body = refundBodySchema.safeParse(request.body);
+      if (!params.success || !body.success) {
+        return reply.code(400).send(fail("VALIDATION_ERROR", "Invalid job refund request"));
+      }
+      try {
+        return ok(await adminService.refundJob({
+          actorUserId: request.auth.userId,
+          jobId: params.data.jobId,
+          reason: body.data.reason,
+          idempotencyKey: body.data.idempotency_key,
         }));
       } catch (err) {
         return handleAdminError(request, reply, err);

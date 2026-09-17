@@ -6,7 +6,7 @@ import UIKit
 
 struct LoginView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var phoneNumber = ""
+    @State private var email = ""
     @State private var verificationCode = ""
     @State private var role = UserRole.client
     @State private var codeRequested = false
@@ -34,11 +34,13 @@ struct LoginView: View {
                         Text("Use the same phone number and role as the web application.")
                             .font(.subheadline)
                             .foregroundStyle(NetworkPeerTheme.muted)
-                        TextField("+15551234567", text: $phoneNumber)
-                            .keyboardType(.phonePad)
-                            .textContentType(.telephoneNumber)
+                        TextField("name@example.com", text: $email)
+                            .keyboardType(.emailAddress)
+                            .textContentType(.emailAddress)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
                             .textFieldStyle(.roundedBorder)
-                            .accessibilityIdentifier("login.phone")
+                            .accessibilityIdentifier("login.email")
                         Picker("I am using NetworkPeer as", selection: $role) {
                             Text("Client").tag(UserRole.client)
                             Text("Worker").tag(UserRole.worker)
@@ -66,7 +68,7 @@ struct LoginView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(NetworkPeerTheme.indigo)
-                        .disabled(phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (codeRequested && verificationCode.isEmpty) || isWorking)
+                        .disabled(email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (codeRequested && verificationCode.isEmpty) || isWorking)
                         .accessibilityIdentifier("login.submit")
                     }
                 }
@@ -86,22 +88,20 @@ struct LoginView: View {
         do {
             if codeRequested {
                 let session = try await api.verifyOTP(
-                    phoneNumber: phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines),
+                    email: email.trimmingCharacters(in: .whitespacesAndNewlines),
                     code: verificationCode,
                     challengeId: challengeId,
                 )
                 model.signedIn(session)
             } else {
                 let result = try await api.requestOTP(
-                    phoneNumber: phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines),
+                    email: email.trimmingCharacters(in: .whitespacesAndNewlines),
                     role: role,
                 )
                 codeRequested = true
                 challengeId = result.challengeId
                 // Do not surface a development OTP echoed by a backend response.
-                message = result.delivery.transport?.lowercased() == "sms"
-                    ? "A verification code was sent to your phone."
-                    : "A verification code was generated through the authorised development delivery channel."
+                message = "A verification code was sent to your email address."
             }
         } catch {
             self.error = error.localizedDescription

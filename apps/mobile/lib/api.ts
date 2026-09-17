@@ -205,17 +205,16 @@ async function requestJson<T>(path: string, method: string, body?: unknown): Pro
 }
 
 export const api = {
-  async requestOtp(phoneNumber: string, role?: "WORKER" | "CLIENT"): Promise<{
+  async requestEmailOtp(email: string, role?: "WORKER" | "CLIENT"): Promise<{
     expiresInSeconds: number;
     otpLength: number;
-    otp?: string;
     challengeId: string;
-    delivery: { transport: "sms" | "log"; to?: string };
+    delivery: { transport: "email" | "log"; to?: string };
   }> {
-    const body: Record<string, unknown> = { phone_number: phoneNumber };
+    const body: Record<string, unknown> = { email };
     if (role) body.role = role;
 
-    const response = await fetch(`${API_BASE_URL}/api/v1/auth/otp/request`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/email-otp/request`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
@@ -225,10 +224,9 @@ export const api = {
       expiresInSeconds?: number;
       otp_length?: number;
       otpLength?: number;
-      otp?: string;
       challenge_id?: string;
       challengeId?: string;
-      delivery?: { transport: "sms" | "log"; to?: string };
+      delivery?: { transport: "email" | "log"; to?: string };
     }>(response);
     if (!response.ok || !payload.success || !payload.data) {
       throw new ApiClientError(
@@ -238,22 +236,29 @@ export const api = {
       );
     }
     return {
-      expiresInSeconds: payload.data.expires_in_seconds ?? payload.data.expiresInSeconds ?? 300,
+      expiresInSeconds: payload.data.expires_in_seconds ?? payload.data.expiresInSeconds ?? 600,
       otpLength: payload.data.otp_length ?? payload.data.otpLength ?? 6,
-      otp: payload.data.otp,
       challengeId: payload.data.challenge_id ?? payload.data.challengeId ?? "",
-      delivery: payload.data.delivery ?? { transport: "sms" },
+      delivery: payload.data.delivery ?? { transport: "email" },
     };
   },
 
-  async verifyOtp(phoneNumber: string, otp: string, challengeId: string): Promise<VerifyOtpResult> {
-    const response = await fetch(`${API_BASE_URL}/api/v1/auth/otp/verify`, {
+  async verifyEmailOtp(
+    email: string,
+    otp: string,
+    challengeId: string,
+    fullName?: string,
+    mobileNumber?: string,
+  ): Promise<VerifyOtpResult> {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/email-otp/verify`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        phone_number: phoneNumber,
+        email,
         otp,
         challenge_id: challengeId,
+        full_name: fullName,
+        mobile_number: mobileNumber,
         transport: "native",
       }),
     });

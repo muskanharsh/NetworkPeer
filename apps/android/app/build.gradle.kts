@@ -154,8 +154,8 @@ android {
             buildConfigField("String", "NETWORKPEER_STRIPE_PUBLISHABLE_KEY", stripeKey.asBuildConfigString())
             buildConfigField("boolean", "NETWORKPEER_STRIPE_CONFIGURED", configuredStripeKey(stripeKey).toString())
             buildConfigField("String", "NETWORKPEER_REALTIME_URL", realtimeUrl.asBuildConfigString())
-            buildConfigField("boolean", "NETWORKPEER_REALTIME_CONFIGURED", configuredRealtimeUrl(realtimeUrl, requireSecureTransport = false).toString())
-            buildConfigField("boolean", "NETWORKPEER_REALTIME_SECURE_TRANSPORT_REQUIRED", "false")
+            buildConfigField("boolean", "NETWORKPEER_REALTIME_CONFIGURED", configuredRealtimeUrl(realtimeUrl, requireSecureTransport = true).toString())
+            buildConfigField("boolean", "NETWORKPEER_REALTIME_SECURE_TRANSPORT_REQUIRED", "true")
             buildConfigField("String", "NETWORKPEER_REALTIME_ORIGIN", realtimeOrigin.asBuildConfigString())
             buildConfigField("boolean", "NETWORKPEER_FCM_CONFIGURED", productionGoogleServices.isFile.toString())
         }

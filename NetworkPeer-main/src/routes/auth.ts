@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { authService } from "../services/auth-service.js";
@@ -22,22 +22,6 @@ const phoneSchema = z
   .regex(/^\+?[1-9]\d{6,14}$/, "Phone number must be in E.164 format, e.g. +1234567890");
 
 const transportSchema = z.enum(["browser", "native"]);
-
-const requestOtpSchema = z.object({
-  phone_number: phoneSchema.optional(),
-  email: z.string().trim().email().optional(),
-  role: z.enum(["CLIENT", "WORKER"]).optional(),
-}).strict();
-
-const verifyOtpSchema = z.object({
-  phone_number: phoneSchema.optional(),
-  email: z.string().trim().email().optional(),
-  challenge_id: z.string().min(1).max(8_192).optional(),
-  otp: z.string().regex(/^\d{4,8}$/, "OTP must be 4-8 digits"),
-  transport: transportSchema.default("native"),
-  full_name: z.string().trim().optional(),
-  mobile_number: phoneSchema.optional(),
-}).strict();
 
 const requestEmailOtpSchema = z.object({
   email: z.string().trim().email("Valid email address is required"),
@@ -154,7 +138,7 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Generate 6-digit code
-    const rawCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const rawCode = randomInt(0, 1_000_000).toString().padStart(6, "0");
     const codeHash = createHash("sha256").update(rawCode).digest("hex");
     const challengeId = `chn_${randomBytes(16).toString("hex")}`;
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
@@ -205,33 +189,30 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
       ?? emailChallengeMap.get(`email:${email}`);
 
     if (!challenge) {
-      // In non-production or demo fallback, allow code 123456
-      if (body.value.otp !== "123456" && config.NODE_ENV === "production") {
-        return reply.code(400).send(fail("OTP_INVALID", "No active verification challenge found. Please request a new code."));
-      }
+      return reply.code(400).send(fail("OTP_INVALID", "No active verification challenge found. Please request a new code."));
+    }
+    if (challenge.consumed) {
+      return reply.code(400).send(fail("OTP_ALREADY_USED", "The verification code has already been used."));
+    }
+    if (Date.now() > challenge.expiresAt) {
+      return reply.code(400).send(fail("OTP_EXPIRED", "The verification code has expired."));
+    }
+    if (challenge.attempts >= 5) {
+      return reply.code(429).send(fail("OTP_LOCKED", "Too many incorrect attempts. Please request a fresh code."));
     }
 
-    if (challenge) {
-      if (challenge.consumed) {
-        return reply.code(400).send(fail("OTP_ALREADY_USED", "The verification code has already been used."));
-      }
-      if (Date.now() > challenge.expiresAt) {
-        return reply.code(400).send(fail("OTP_EXPIRED", "The verification code has expired."));
-      }
-      if (challenge.attempts >= 5) {
-        return reply.code(429).send(fail("OTP_LOCKED", "Too many incorrect attempts. Please request a fresh code."));
-      }
+    const inputHash = createHash("sha256").update(body.value.otp).digest("hex");
+    const expectedHash = Buffer.from(challenge.codeHash, "hex");
+    const providedHash = Buffer.from(inputHash, "hex");
+    const isValid = expectedHash.length === providedHash.length
+      && timingSafeEqual(expectedHash, providedHash);
 
-      const inputHash = createHash("sha256").update(body.value.otp).digest("hex");
-      const isValid = (inputHash === challenge.codeHash) || (body.value.otp === "123456" && config.NODE_ENV !== "production");
-
-      if (!isValid) {
-        challenge.attempts++;
-        return reply.code(400).send(fail("OTP_INVALID", "The verification code is incorrect."));
-      }
-
-      challenge.consumed = true;
+    if (!isValid) {
+      challenge.attempts++;
+      return reply.code(400).send(fail("OTP_INVALID", "The verification code is incorrect."));
     }
+
+    challenge.consumed = true;
 
     // Check user existence
     let existingUser = await getUserByEmail(email);
@@ -282,151 +263,6 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     }
 
     return ok({ ...tokens, is_new_account: isNewAccount });
-  });
-
-  // Legacy SMS OTP request endpoint with transparent email-or-phone fallback
-  app.post("/auth/otp/request", async (request, reply) => {
-    const body = parseBody(requestOtpSchema, request.body);
-    if (!body.ok) {
-      return reply.code(400).send(fail("VALIDATION_ERROR", body.message));
-    }
-
-    if (body.value.email) {
-      const email = body.value.email.toLowerCase();
-      const challengeId = `chn_${randomBytes(16).toString("hex")}`;
-      const rawCode = config.NODE_ENV === "production"
-        ? Math.floor(100000 + Math.random() * 900000).toString()
-        : "123456";
-      emailChallengeMap.set(`email:${email}`, {
-        id: challengeId,
-        email,
-        codeHash: createHash("sha256").update(rawCode).digest("hex"),
-        expiresAt: Date.now() + 600_000,
-        attempts: 0,
-        consumed: false,
-        role: body.value.role ?? "CLIENT",
-      });
-
-      await emailService.sendOtpEmail({
-        to: email,
-        code: rawCode,
-        clientIp: request.ip,
-        role: body.value.role,
-      });
-
-      return ok({
-        challenge_id: challengeId,
-        expires_in_seconds: 600,
-        otp_length: 6,
-        delivery: { transport: "email" },
-        development_otp: config.NODE_ENV !== "production" ? rawCode : undefined,
-      });
-    }
-
-    try {
-      if (config.COGNITO_USER_POOL_ID && body.value.phone_number) {
-        const result = await authService.requestOtp({
-          phone: body.value.phone_number,
-          role: body.value.role,
-        });
-        return ok(result);
-      }
-    } catch {
-      // Fallback
-    }
-
-    // Safe fallback for local/native testing
-    const challengeId = `chn_${randomBytes(16).toString("hex")}`;
-    return ok({
-      challenge_id: challengeId,
-      expires_in_seconds: 600,
-      otp_length: 6,
-      delivery: { transport: "sms" },
-      development_otp: "123456",
-    });
-  });
-
-  // Legacy SMS OTP verify endpoint
-  app.post("/auth/otp/verify", async (request, reply) => {
-    const body = parseBody(verifyOtpSchema, request.body);
-    if (!body.ok) {
-      return reply.code(400).send(fail("VALIDATION_ERROR", body.message));
-    }
-
-    if (body.value.transport === "browser") requireAllowedBrowserOrigin(request);
-
-    // If email provided or phone lookup
-    if (body.value.email) {
-      const email = body.value.email.toLowerCase();
-      let user = await getUserByEmail(email);
-      if (!user) {
-        user = await resolveEmailUser({
-          email,
-          phone: body.value.mobile_number || body.value.phone_number || "+919876543210",
-          fullName: body.value.full_name || "Verified User",
-          role: "CLIENT",
-        });
-      }
-      const tokens = signTokenPair({
-        id: user.id,
-        role: user.role,
-        phone: user.phone_number,
-        email: user.email,
-        full_name: user.full_name,
-      });
-      if (body.value.transport === "browser") {
-        (reply as any).setCookie(refreshCookieName, tokens.refresh_token, cookieOptions());
-        return ok(browserTokenResponse(tokens));
-      }
-      return ok(tokens);
-    }
-
-    try {
-      if (config.COGNITO_USER_POOL_ID && body.value.phone_number && body.value.challenge_id) {
-        const result = await authService.verifyOtpAndLogin({
-          phone: body.value.phone_number,
-          otp: body.value.otp,
-          challengeId: body.value.challenge_id,
-        });
-        if (body.value.transport === "browser") {
-          (reply as any).setCookie(refreshCookieName, result.refresh_token, cookieOptions());
-          return ok(browserTokenResponse(result));
-        }
-        return ok(result);
-      }
-    } catch {
-      // Fallback
-    }
-
-    const phone = body.value.phone_number || "+919876543210";
-    let user = await getUserById("demo-worker-id");
-    if (!user) {
-      user = {
-        id: "demo-worker-id",
-        phone_number: phone,
-        email: "worker@networkpeer.io",
-        full_name: body.value.full_name || "Verified Worker",
-        role: "WORKER",
-        avatar_url: null,
-        is_active: true,
-        is_verified: true,
-        last_login_at: new Date(),
-        created_at: new Date(),
-        updated_at: new Date(),
-      };
-    }
-    const tokens = signTokenPair({
-      id: user.id,
-      role: user.role,
-      phone: user.phone_number,
-      email: user.email,
-      full_name: user.full_name,
-    });
-    if (body.value.transport === "browser") {
-      (reply as any).setCookie(refreshCookieName, tokens.refresh_token, cookieOptions());
-      return ok(browserTokenResponse(tokens));
-    }
-    return ok(tokens);
   });
 
   app.post("/auth/refresh", async (request, reply) => {

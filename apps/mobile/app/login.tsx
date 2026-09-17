@@ -5,27 +5,14 @@ import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { colors, radii, spacing, typography } from "@/lib/theme";
 
-function sanitizePhone(raw: string): string {
-  const digits = raw.replace(/\D/g, "");
-  if (digits.startsWith("91") && digits.length === 12) {
-    return digits.slice(2);
-  }
-  return digits.slice(0, 10);
-}
-
-function toE164(raw: string): string {
-  const digits = sanitizePhone(raw);
-  return digits ? `+91${digits}` : "";
-}
-
-function isValidPhone(raw: string): boolean {
-  return sanitizePhone(raw).length === 10;
+function isValidEmail(raw: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw.trim());
 }
 
 export default function LoginScreen() {
   const { login, setWorkerName } = useAuth();
   const router = useRouter();
-  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [challengeId, setChallengeId] = useState("");
   const [otpSent, setOtpSent] = useState(false);
@@ -33,7 +20,6 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
   const [otpLength, setOtpLength] = useState(6);
-  const [devOtp, setDevOtp] = useState<string | null>(null);
   const [needsName, setNeedsName] = useState(false);
   const [fullName, setFullName] = useState("");
 
@@ -44,18 +30,17 @@ export default function LoginScreen() {
   }, [cooldown]);
 
   async function requestOtp() {
-    const normalized = toE164(phone);
-    if (!isValidPhone(phone)) {
-      setError("Enter a valid 10-digit Indian mobile number.");
+    const normalized = email.trim().toLowerCase();
+    if (!isValidEmail(normalized)) {
+      setError("Enter a valid email address.");
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const result = await api.requestOtp(normalized, "WORKER");
+      const result = await api.requestEmailOtp(normalized, "WORKER");
       setChallengeId(result.challengeId);
       setOtpLength(result.otpLength);
-      setDevOtp(result.otp ?? null);
       setOtpSent(true);
       setCooldown(60);
     } catch (e) {
@@ -66,9 +51,9 @@ export default function LoginScreen() {
   }
 
   async function verifyOtp() {
-    const normalized = toE164(phone);
-    if (!isValidPhone(phone)) {
-      setError("Enter a valid 10-digit Indian mobile number.");
+    const normalized = email.trim().toLowerCase();
+    if (!isValidEmail(normalized)) {
+      setError("Enter a valid email address.");
       return;
     }
     if (otp.trim().length < 4) {
@@ -166,23 +151,20 @@ export default function LoginScreen() {
             <Text style={styles.back}>‹</Text>
           </Pressable>
           <Text style={styles.title}>Worker sign in</Text>
-          <Text style={styles.subtitle}>Sign in with your phone number. No password needed.</Text>
+          <Text style={styles.subtitle}>Sign in with your email address. No password needed.</Text>
         </View>
 
-        <Text style={styles.label}>Phone number</Text>
-        <View style={styles.phoneInputRow}>
-          <View style={styles.countryCodeBadge}>
-            <Text style={styles.countryCodeText}>+91</Text>
-          </View>
-          <TextInput
-            style={styles.phoneInput}
-            keyboardType="phone-pad"
-            autoCapitalize="none"
-            maxLength={10}
-            value={phone}
-            onChangeText={(text) => setPhone(sanitizePhone(text))}
-          />
-        </View>
+        <Text style={styles.label}>Email address</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="you@example.com"
+          placeholderTextColor={colors.textMuted}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+          value={email}
+          onChangeText={setEmail}
+        />
 
         {otpSent && (
           <>
@@ -196,11 +178,6 @@ export default function LoginScreen() {
               onChangeText={setOtp}
               maxLength={otpLength}
             />
-            {devOtp && (
-              <View style={styles.devHint}>
-                <Text style={styles.devHintText}>Development code: {devOtp}</Text>
-              </View>
-            )}
           </>
         )}
 
@@ -217,7 +194,7 @@ export default function LoginScreen() {
         {otpSent && (
           <View style={styles.links}>
             <Pressable onPress={() => setOtpSent(false)}>
-              <Text style={styles.link}>Change phone number</Text>
+              <Text style={styles.link}>Change email address</Text>
             </Pressable>
             <Pressable disabled={cooldown > 0 || loading} onPress={requestOtp}>
               <Text style={[styles.link, cooldown > 0 && styles.linkDisabled]}>

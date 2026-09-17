@@ -52,7 +52,10 @@ afterEach(async () => {
 });
 
 describe("Cognito OTP routes", () => {
-  it("forwards the selected role when starting a public account challenge", async () => {
+  // The legacy phone-OTP routes issued signed tokens without ever comparing the
+  // submitted code against a stored challenge. They are removed; email OTP is the
+  // only identity channel. These assert they stay removed.
+  it("no longer exposes the legacy OTP request route", async () => {
     app = await buildTestApp();
 
     const response = await app.inject({
@@ -61,24 +64,14 @@ describe("Cognito OTP routes", () => {
       payload: { phone_number: "+15550000031", role: "CLIENT" },
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
-      success: true,
-      data: {
-        challenge_id: "cognito-challenge",
-        expires_in_seconds: 300,
-        otp_length: 6,
-        delivery: { transport: "sms" },
-      },
-      error: null,
-    });
-    expect(requestOtp).toHaveBeenCalledWith({ phone: "+15550000031", role: "CLIENT" });
+    expect(response.statusCode).toBe(404);
+    expect(requestOtp).not.toHaveBeenCalled();
   });
 
-  it("verifies a native challenge without accepting the legacy role field", async () => {
+  it("no longer exposes the legacy OTP verify route", async () => {
     app = await buildTestApp();
 
-    const success = await app.inject({
+    const response = await app.inject({
       method: "POST",
       url: "/api/v1/auth/otp/verify",
       payload: {
@@ -89,27 +82,7 @@ describe("Cognito OTP routes", () => {
       },
     });
 
-    expect(success.statusCode).toBe(200);
-    expect(verifyOtpAndLogin).toHaveBeenCalledWith({
-      phone: "+15550000031",
-      otp: "123456",
-      challengeId: "cognito-challenge",
-    });
-
-    verifyOtpAndLogin.mockClear();
-    const legacy = await app.inject({
-      method: "POST",
-      url: "/api/v1/auth/otp/verify",
-      payload: {
-        phone_number: "+15550000031",
-        challenge_id: "cognito-challenge",
-        otp: "123456",
-        role: "CLIENT",
-        transport: "native",
-      },
-    });
-
-    expect(legacy.statusCode).toBe(400);
+    expect(response.statusCode).toBe(404);
     expect(verifyOtpAndLogin).not.toHaveBeenCalled();
   });
 });

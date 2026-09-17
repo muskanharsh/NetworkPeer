@@ -53,12 +53,6 @@ interface NetworkPeerApi {
     @POST("auth/email-otp/verify")
     suspend fun verifyEmailOtp(@Body body: EmailOtpVerifyBody): ApiEnvelope<TokenPair>
 
-    @POST("auth/otp/request")
-    suspend fun requestOtp(@Body body: OtpRequestBody): ApiEnvelope<OtpRequestResult>
-
-    @POST("auth/otp/verify")
-    suspend fun verifyOtp(@Body body: OtpVerifyBody): ApiEnvelope<TokenPair>
-
     @POST("auth/logout")
     @Headers("X-NetworkPeer-Skip-Authorization: true")
     suspend fun logout(@Body body: RefreshTokenBody): ApiEnvelope<LogoutResult>
@@ -221,20 +215,6 @@ data class EmailOtpVerifyBody(
     @SerialName("mobile_number") val mobileNumber: String? = null,
     val transport: String = "native",
     val role: UserRole? = null,
-)
-
-@Serializable
-data class OtpRequestBody(
-    val phone_number: String,
-    val role: UserRole,
-)
-
-@Serializable
-data class OtpVerifyBody(
-    val phone_number: String,
-    val otp: String,
-    @SerialName("challenge_id") val challengeId: String,
-    val transport: String = "native",
 )
 
 @Serializable

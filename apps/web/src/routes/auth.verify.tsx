@@ -71,27 +71,6 @@ function VerifyOtpPage() {
     setStatus("loading");
     setError("");
 
-    if (otp === "123456" || otp === "888888" || otp === pending.developmentOtp) {
-      const demoSession = {
-        accessToken: `demo-${pending.role.toLowerCase()}-token`,
-        refreshToken: `demo-${pending.role.toLowerCase()}-refresh`,
-        expiresIn: 86400,
-        user: {
-          id: `demo-${pending.role.toLowerCase()}-id`,
-          role: pending.role,
-          phone: pending.mobileNumber || pending.phoneNumber || "+919876543210",
-          email: pending.email || `${pending.role.toLowerCase()}@networkpeer.test`,
-          full_name: pending.fullName || (pending.role === "CLIENT" ? "Demo Client" : "Verified Worker"),
-          mobile_number: pending.mobileNumber || pending.phoneNumber || "+919876543210",
-        },
-      };
-      authSession.set(demoSession);
-      window.sessionStorage.removeItem(PENDING_OTP_KEY);
-      toast.success("Verification successful!");
-      await router.navigate({ to: pending.role === "CLIENT" ? "/client" : "/worker" });
-      return;
-    }
-
     try {
       let session: any;
       if (pending.type === "email" && pending.email) {
@@ -103,8 +82,6 @@ function VerifyOtpPage() {
           mobileNumber: pending.mobileNumber,
           role: pending.role,
         });
-      } else if (pending.phoneNumber) {
-        session = await api.verifyOtp(pending.phoneNumber, otp, pending.role);
       } else {
         throw new Error("Missing verification details");
       }
@@ -128,26 +105,6 @@ function VerifyOtpPage() {
       toast.success("Identity verified. Session activated.");
       await router.navigate({ to: user.role === "CLIENT" ? "/client" : "/worker" });
     } catch (requestError) {
-      if (otp.length === 6) {
-        const fallbackSession = {
-          accessToken: `demo-${pending.role.toLowerCase()}-token`,
-          refreshToken: `demo-${pending.role.toLowerCase()}-refresh`,
-          expiresIn: 86400,
-          user: {
-            id: `demo-${pending.role.toLowerCase()}-id`,
-            role: pending.role,
-            phone: pending.mobileNumber || pending.phoneNumber || "+919876543210",
-            email: pending.email || `${pending.role.toLowerCase()}@networkpeer.test`,
-            full_name: pending.fullName || (pending.role === "CLIENT" ? "Demo Client" : "Verified Worker"),
-            mobile_number: pending.mobileNumber || pending.phoneNumber || "+919876543210",
-          },
-        };
-        authSession.set(fallbackSession);
-        window.sessionStorage.removeItem(PENDING_OTP_KEY);
-        toast.success("Session verified (Demo Mode)");
-        await router.navigate({ to: pending.role === "CLIENT" ? "/client" : "/worker" });
-        return;
-      }
       const message = errorMessage(requestError);
       setError(message);
       toast.error(message);
@@ -163,13 +120,11 @@ function VerifyOtpPage() {
       let result: any;
       if (pending.type === "email" && pending.email) {
         result = await api.requestEmailOtp(pending.email, pending.role);
-      } else if (pending.phoneNumber) {
-        result = await api.requestOtp(pending.phoneNumber);
       }
       if (result) {
         setPending((current) => {
           if (!current) return current;
-          const next = { ...current, otpLength: result.otp_length, challengeId: result.challenge_id, developmentOtp: result.otp };
+          const next = { ...current, otpLength: result.otp_length, challengeId: result.challenge_id };
           window.sessionStorage.setItem(PENDING_OTP_KEY, JSON.stringify(next));
           return next;
         });
@@ -393,12 +348,6 @@ function VerifyOtpPage() {
           </div>
           {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
         </div>
-        {pending?.developmentOtp ? (
-          <p className="mt-3 rounded-xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
-            Development OTP:{" "}
-            <span className="font-semibold tracking-widest">{pending.developmentOtp}</span>
-          </p>
-        ) : null}
         <button
           type="button"
           onClick={() => void verify()}

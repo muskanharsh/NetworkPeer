@@ -39,21 +39,21 @@ public actor NetworkPeerAPI {
         sessionStore.read()
     }
 
-    public func requestOTP(phoneNumber: String, role: UserRole) async throws -> OTPRequestResult {
-        try validatePhoneNumber(phoneNumber)
-        return try await request(path: "auth/otp/request", method: "POST", body: try encode(OTPRequestBody(phoneNumber: phoneNumber, role: role)), requiresAuthentication: false)
+    public func requestOTP(email: String, role: UserRole) async throws -> OTPRequestResult {
+        try validateEmail(email)
+        return try await request(path: "auth/email-otp/request", method: "POST", body: try encode(OTPRequestBody(email: email, role: role)), requiresAuthentication: false)
     }
 
     @discardableResult
-    public func verifyOTP(phoneNumber: String, code: String, challengeId: String) async throws -> StoredSession {
-        try validatePhoneNumber(phoneNumber)
+    public func verifyOTP(email: String, code: String, challengeId: String) async throws -> StoredSession {
+        try validateEmail(email)
         guard !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw NetworkPeerAPIError.validation("Enter the verification code.")
         }
         let pair: TokenPair = try await request(
-            path: "auth/otp/verify",
+            path: "auth/email-otp/verify",
             method: "POST",
-            body: try encode(OTPVerifyBody(phoneNumber: phoneNumber, otp: code, challengeId: challengeId)),
+            body: try encode(OTPVerifyBody(email: email, otp: code, challengeId: challengeId)),
             requiresAuthentication: false,
         )
         let session = StoredSession(pair: pair)
@@ -272,13 +272,16 @@ public actor NetworkPeerAPI {
         }
     }
 
-    private func validatePhoneNumber(_ phoneNumber: String) throws {
-        let value = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
-        let digits = value.dropFirst()
-        guard value.first == "+",
-              (8 ... 15).contains(digits.count),
-              digits.unicodeScalars.allSatisfy({ (48 ... 57).contains($0.value) }) else {
-            throw NetworkPeerAPIError.validation("Use an E.164 phone number, for example +15551234567.")
+    private func validateEmail(_ email: String) throws {
+        let value = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = value.split(separator: "@", omittingEmptySubsequences: false)
+        guard parts.count == 2,
+              !parts[0].isEmpty,
+              parts[1].contains("."),
+              !parts[1].hasPrefix("."),
+              !parts[1].hasSuffix("."),
+              !value.contains(" ") else {
+            throw NetworkPeerAPIError.validation("Enter a valid email address, for example name@example.com.")
         }
     }
 
@@ -666,21 +669,21 @@ public struct DeviceRegistration: Codable, Sendable {
 }
 
 private struct OTPRequestBody: Encodable {
-    let phoneNumber: String
+    let email: String
     let role: UserRole
     enum CodingKeys: String, CodingKey {
-        case phoneNumber = "phone_number"
+        case email
         case role
     }
 }
 
 private struct OTPVerifyBody: Encodable {
-    let phoneNumber: String
+    let email: String
     let otp: String
     let challengeId: String
     let transport = "native"
     enum CodingKeys: String, CodingKey {
-        case phoneNumber = "phone_number"
+        case email
         case otp
         case challengeId = "challenge_id"
         case transport

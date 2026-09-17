@@ -18,7 +18,7 @@ echo " http://networkpeer-staging-api-alb-969746120.eu-north-1.elb.amazonaws.com
 echo ""
 echo "For Demo Login on Phone:"
 echo " - Enter any 10-digit phone number (+91)"
-echo " - Enter Master Demo Passcode: 888888"
+echo " - Enter the verification code emailed to you"
 echo "========================================================"
 echo ""
 

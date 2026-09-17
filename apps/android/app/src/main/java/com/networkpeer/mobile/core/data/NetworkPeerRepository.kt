@@ -17,8 +17,6 @@ import com.networkpeer.mobile.core.model.NearbyJobsPage
 import com.networkpeer.mobile.core.model.NotificationPage
 import com.networkpeer.mobile.core.model.NetworkPeerApiException
 import com.networkpeer.mobile.core.model.OtpRequestResult
-import com.networkpeer.mobile.core.model.OtpDelivery
-import com.networkpeer.mobile.core.model.AuthUser
 import com.networkpeer.mobile.core.model.StoredSession
 import com.networkpeer.mobile.core.model.SubmitWorkResult
 import com.networkpeer.mobile.core.model.SyncPage
@@ -44,8 +42,6 @@ import com.networkpeer.mobile.core.network.CreateJobBody
 import com.networkpeer.mobile.core.network.DeregisterDeviceBody
 import com.networkpeer.mobile.core.network.IdempotencyBody
 import com.networkpeer.mobile.core.network.NetworkPeerApi
-import com.networkpeer.mobile.core.network.OtpRequestBody
-import com.networkpeer.mobile.core.network.OtpVerifyBody
 import com.networkpeer.mobile.core.network.RefreshTokenBody
 import com.networkpeer.mobile.core.network.RegisterDeviceBody
 import com.networkpeer.mobile.core.network.ReserveEvidenceBody
@@ -68,25 +64,14 @@ class AuthRepository(
         role: UserRole,
         fullName: String? = null,
         mobileNumber: String? = null,
-    ): OtpRequestResult = try {
-        apiCall {
-            api.requestEmailOtp(
-                com.networkpeer.mobile.core.network.EmailOtpRequestBody(
-                    email = email,
-                    role = role,
-                    fullName = fullName,
-                    mobileNumber = mobileNumber,
-                )
+    ): OtpRequestResult = apiCall {
+        api.requestEmailOtp(
+            com.networkpeer.mobile.core.network.EmailOtpRequestBody(
+                email = email,
+                role = role,
+                fullName = fullName,
+                mobileNumber = mobileNumber,
             )
-        }
-    } catch (_: Throwable) {
-        OtpRequestResult(
-            challengeId = "chn_email_${System.currentTimeMillis()}",
-            expiresInSeconds = 600,
-            otpLength = 6,
-            otp = "123456",
-            message = "Verification code dispatched to $email.",
-            delivery = OtpDelivery(transport = "email"),
         )
     }
 
@@ -97,7 +82,7 @@ class AuthRepository(
         fullName: String? = null,
         mobileNumber: String? = null,
         role: UserRole = UserRole.WORKER,
-    ): StoredSession = try {
+    ): StoredSession {
         val pair = apiCall {
             api.verifyEmailOtp(
                 com.networkpeer.mobile.core.network.EmailOtpVerifyBody(
@@ -110,32 +95,6 @@ class AuthRepository(
                 )
             )
         }
-        StoredSession.from(pair).also(client.sessionStore::save)
-    } catch (_: Throwable) {
-        val fallbackUser = AuthUser(
-            id = "usr_${System.currentTimeMillis()}",
-            role = role,
-            phone = mobileNumber ?: "+919971536158",
-            fullName = fullName?.ifBlank { if (role == UserRole.CLIENT) "Verified Client" else "Verified Worker" }
-                ?: if (role == UserRole.CLIENT) "Verified Client" else "Verified Worker",
-            email = email,
-            mobileNumber = mobileNumber ?: "+919971536158",
-        )
-        val fallbackSession = StoredSession(
-            accessToken = "token_${System.currentTimeMillis()}",
-            refreshToken = "refresh_${System.currentTimeMillis()}",
-            expiresInSeconds = 86400,
-            user = fallbackUser,
-        )
-        fallbackSession.also(client.sessionStore::save)
-    }
-
-    suspend fun requestOtp(phoneNumber: String, role: UserRole): OtpRequestResult = apiCall {
-        api.requestOtp(OtpRequestBody(phoneNumber, role))
-    }
-
-    suspend fun verifyOtp(phoneNumber: String, otp: String, challengeId: String): StoredSession {
-        val pair = apiCall { api.verifyOtp(OtpVerifyBody(phoneNumber, otp, challengeId)) }
         return StoredSession.from(pair).also(client.sessionStore::save)
     }
 

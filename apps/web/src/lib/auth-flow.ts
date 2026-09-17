@@ -49,7 +49,3 @@ export function formatPhoneNumber(rawValue: string, countryCode: string): string
 export function isOtpCodeValid(value: string, length = 6): boolean {
   return new RegExp(`^\\d{${length}}$`).test(value || "");
 }
-
-export function getDemoOtp(): string {
-  return "123456";
-}
