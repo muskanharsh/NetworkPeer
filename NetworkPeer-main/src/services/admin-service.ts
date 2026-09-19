@@ -7,6 +7,9 @@ import {
   listAdminAuditLog,
   listAdminUsers,
   refundClientJob,
+  listExhaustedPaymentOperations,
+  resetPaymentOperationDispatch,
+  type ExhaustedPaymentOperation,
   updateWorkerVerificationAsAdmin,
   type AdminJobOverrideInput,
   type ListAdminAuditInput,
@@ -145,6 +148,31 @@ export class AdminService {
         refunded_amount_cents: result.refundedAmountCents,
         currency: result.currency,
         job: result.job,
+      };
+    } catch (err) {
+      return mapDatabaseError(err);
+    }
+  }
+
+  async listStuckPayments(limit = 50): Promise<{ items: ExhaustedPaymentOperation[] }> {
+    try {
+      return { items: await listExhaustedPaymentOperations(limit) };
+    } catch (err) {
+      return mapDatabaseError(err);
+    }
+  }
+
+  async requeuePayment(input: {
+    actorUserId: string;
+    operationId: string;
+    reason: string;
+  }): Promise<{ operation_id: string; dispatch_attempts: number; next_dispatch_at: string }> {
+    try {
+      const result = await resetPaymentOperationDispatch(input);
+      return {
+        operation_id: result.operationId,
+        dispatch_attempts: result.dispatchAttempts,
+        next_dispatch_at: result.nextDispatchAt,
       };
     } catch (err) {
       return mapDatabaseError(err);
