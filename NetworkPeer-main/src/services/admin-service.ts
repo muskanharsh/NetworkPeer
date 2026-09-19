@@ -75,6 +75,17 @@ export class AdminService {
       const result = await adminOverrideJob(input);
       return { audit_id: result.auditId, job: result.job };
     } catch (err) {
+      // admin_override_job's CANCEL branch sets status without touching
+      // escrow_status, so enforce_job_financial_state rejects any funded job with
+      // an opaque 23514. Refunds are deliberately a separate audited action
+      // (migration 042), so point the operator at it instead of auto-refunding.
+      if (input.action === "CANCEL" && databaseErrorCode(err) === "23514") {
+        throw new AdminServiceError(
+          "REFUND_REQUIRED_BEFORE_CANCEL",
+          "This job holds escrowed funds. Issue a refund via POST /admin/jobs/:jobId/refund before cancelling.",
+          409,
+        );
+      }
       return mapDatabaseError(err);
     }
   }
