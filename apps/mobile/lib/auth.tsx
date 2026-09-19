@@ -39,8 +39,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
-  const login = useCallback(async (phone: string, code: string, challengeId: string) => {
-    const result = await api.verifyOtp(phone, code, challengeId);
+  const login = useCallback(async (email: string, code: string, challengeId: string) => {
+    const result = await api.verifyEmailOtp(email, code, challengeId);
     const workerSession: WorkerSession = {
       id: result.session.user.id,
       role: "WORKER",

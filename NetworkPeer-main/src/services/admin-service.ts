@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   adminOverrideJob,
   adminSuspendUser,
@@ -5,9 +6,11 @@ import {
   getAdminAnalytics,
   listAdminAuditLog,
   listAdminUsers,
+  refundClientJob,
   updateWorkerVerificationAsAdmin,
   type AdminJobOverrideInput,
   type ListAdminAuditInput,
+  type RefundClientJobResult,
   type WorkerVerificationStatus,
 } from "../repository.js";
 import type { JobStatus, UserRole } from "../contracts.js";
@@ -37,6 +40,7 @@ function mapDatabaseError(err: unknown): never {
   const code = databaseErrorCode(err);
   if (code === "P0002") throw new AdminServiceError("NOT_FOUND", "The requested record was not found", 404);
   if (code === "42501") throw new AdminServiceError("FORBIDDEN", "Administrative privileges are required", 403);
+  if (code === "23505") throw new AdminServiceError("IDEMPOTENCY_KEY_REUSED", "The idempotency key was reused with different input", 409);
   if (code === "55000" || code === "23514" || code === "40001") {
     throw new AdminServiceError("ADMIN_OPERATION_CONFLICT", "The requested operation is not allowed in the current state", 409);
   }
@@ -106,6 +110,45 @@ export class AdminService {
       offset: (input.page - 1) * input.perPage,
     });
     return { items: result.items, total: result.total, page: input.page, per_page: input.perPage };
+  }
+
+  async refundJob(input: {
+    actorUserId: string;
+    jobId: string;
+    reason: string;
+    idempotencyKey: string;
+  }): Promise<{
+    audit_id: string;
+    refund_ledger_transaction_id: string;
+    refunded_amount_cents: number;
+    currency: string;
+    job: RefundClientJobResult["job"];
+  }> {
+    const idempotencyFingerprint = createHash("sha256")
+      .update(JSON.stringify({
+        operation: "REFUND",
+        jobId: input.jobId,
+        idempotencyKey: input.idempotencyKey,
+      }))
+      .digest("hex");
+    try {
+      const result = await refundClientJob({
+        actorUserId: input.actorUserId,
+        jobId: input.jobId,
+        reason: input.reason,
+        idempotencyKey: input.idempotencyKey,
+        idempotencyFingerprint,
+      });
+      return {
+        audit_id: result.auditId,
+        refund_ledger_transaction_id: result.refundLedgerTransactionId,
+        refunded_amount_cents: result.refundedAmountCents,
+        currency: result.currency,
+        job: result.job,
+      };
+    } catch (err) {
+      return mapDatabaseError(err);
+    }
   }
 
   async suspendUser(input: {

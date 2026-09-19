@@ -259,15 +259,19 @@ endpoints:
   auth:
     request_otp:
       method: POST
-      path: /auth/otp/request
+      path: /auth/email-otp/request
       auth: none
-      body: { phone_number: E164-string }
-      data: { expiresInSeconds: integer, otpLength: integer, delivery: otp_delivery, otp: "string|optional" }
+      body: { email: string, role: "CLIENT|WORKER|optional" }
+      data: { expiresInSeconds: integer, otpLength: integer, delivery: otp_delivery, challenge_id: string }
+      behavior: >-
+        Email OTP is the sole identity channel. The legacy phone paths
+        /auth/otp/request and /auth/otp/verify were removed: they issued signed
+        tokens without ever comparing the submitted code to a stored challenge.
     verify_otp:
       method: POST
-      path: /auth/otp/verify
+      path: /auth/email-otp/verify
       auth: none
-      body: { phone_number: E164-string, otp: string, role: "CLIENT|WORKER|optional" }
+      body: { email: string, otp: string, challenge_id: "string|optional", full_name: "string|optional", mobile_number: "string|optional" }
       data: token_pair
     refresh:
       method: POST

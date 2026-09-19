@@ -259,15 +259,15 @@ variable "alb_deletion_protection" {
 }
 
 variable "enable_https_listener" {
-  description = "Whether to create the public HTTPS listener. Service activation additionally requires this listener and an explicit canonical domain_name."
+  description = "Whether to create the public HTTPS listener. Service activation additionally requires this listener and an explicit canonical domain_name. Requires acm_certificate_arn, or domain_name plus route53_zone_id."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "enable_http_redirect" {
   description = "Whether to expose port 80 solely to redirect HTTP requests to HTTPS."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "acm_certificate_arn" {

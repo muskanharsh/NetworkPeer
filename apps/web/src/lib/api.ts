@@ -21,6 +21,16 @@ import {
   type SyncTopic,
 } from "@networkpeer/contracts";
 
+interface WorkerSyncResult {
+  events: SyncEvent[];
+  jobs: WorkerJobDetail[];
+  snapshot_jobs: WorkerJobDetail[];
+  ledger_entries: unknown[];
+  removed_job_ids: string[];
+  has_more: boolean;
+  next_cursor: string;
+}
+
 export function resolveApiBaseUrl(): string {
   if (typeof window !== "undefined") {
     return "/api/v1";
@@ -539,6 +549,7 @@ function getSeedJobs(): StoredJobData[] {
         client_id: "demo-client-id",
         worker_id: "demo-worker-id",
         title: "Commercial Real Estate Façade Documentation",
+        description: "Capture wide and detail shots of the building façade, including signage and entry points.",
         category: "Photography",
         status: "IN_PROGRESS",
         priority: 3,
@@ -578,6 +589,7 @@ function getSeedJobs(): StoredJobData[] {
         client_id: "demo-client-id",
         worker_id: "demo-worker-id",
         title: "Distribution Warehouse Quality Inspection",
+        description: "Inspect inbound pallets for damage and record condition photographs for each bay.",
         category: "Inspection",
         status: "SUBMITTED",
         priority: 2,
@@ -617,6 +629,7 @@ function getSeedJobs(): StoredJobData[] {
         client_id: "demo-client-id",
         worker_id: "demo-worker-id",
         title: "Secure Document Handover Verification",
+        description: "Verify recipient identity and capture a GPS-stamped photograph confirming handover.",
         category: "Delivery",
         status: "APPROVED",
         priority: 1,
@@ -743,20 +756,10 @@ function saveLocalEvidence(jobId: string, evidence: EvidenceSummary[]): void {
 
 export const api = {
   async requestEmailOtp(email: string, role?: string): Promise<OtpRequestResult> {
-    try {
-      return await request("/auth/email-otp/request", {
-        method: "POST",
-        body: JSON.stringify({ email, role: role ?? "CLIENT" }),
-      });
-    } catch {
-      return {
-        challenge_id: `chn_${Date.now()}`,
-        expires_in_seconds: 600,
-        otp_length: 6,
-        otp: "123456",
-        delivery: { transport: "email" },
-      };
-    }
+    return await request("/auth/email-otp/request", {
+      method: "POST",
+      body: JSON.stringify({ email, role: role ?? "CLIENT" }),
+    });
   },
   async verifyEmailOtp(input: {
     email: string;
@@ -766,84 +769,20 @@ export const api = {
     mobileNumber?: string;
     role?: Exclude<AppRole, "ADMIN">;
   }): Promise<AuthSession & { isNewAccount: boolean }> {
-    try {
-      const pair = await request<TokenPair & { is_new_account?: boolean }>("/auth/email-otp/verify", {
-        method: "POST",
-        body: JSON.stringify({
-          email: input.email,
-          otp: input.otp,
-          challenge_id: input.challengeId,
-          full_name: input.fullName,
-          mobile_number: input.mobileNumber,
-          transport: "browser",
-        }),
-      });
-      const session = sessionFromTokenPair(pair);
-      authSession.set(session);
-      return { ...session, isNewAccount: Boolean(pair.is_new_account) };
-    } catch {
-      const resolvedRole = input.role ?? "CLIENT";
-      const fallbackSession: AuthSession = {
-        accessToken: `email-session-${Date.now()}`,
-        refreshToken: `email-refresh-${Date.now()}`,
-        expiresIn: 86400,
-        user: {
-          id: `usr_${Date.now()}`,
-          email: input.email,
-          full_name: input.fullName || (resolvedRole === "CLIENT" ? "Verified Client" : "Verified Worker"),
-          mobile_number: input.mobileNumber || "+919971536158",
-          role: resolvedRole,
-        },
-      };
-      authSession.set(fallbackSession);
-      return { ...fallbackSession, isNewAccount: true };
-    }
-  },
-  async requestOtp(phoneNumber: string): Promise<OtpRequestResult> {
-    try {
-      return await request("/auth/otp/request", {
-        method: "POST",
-        body: JSON.stringify({ phone_number: phoneNumber }),
-      });
-    } catch {
-      return {
-        challenge_id: `chn_sms_${Date.now()}`,
-        expires_in_seconds: 300,
-        otp_length: 6,
-        otp: "123456",
-        delivery: { transport: "sms" },
-      };
-    }
-  },
-  async verifyOtp(
-    phoneNumber: string,
-    otp: string,
-    role: Exclude<AppRole, "ADMIN">,
-  ): Promise<AuthSession & { isNewAccount: boolean }> {
-    try {
-      const pair = await request<TokenPair>("/auth/otp/verify", {
-        method: "POST",
-        body: JSON.stringify({ phone_number: phoneNumber, otp, role }),
-      });
-      const session = sessionFromTokenPair(pair);
-      authSession.set(session);
-      return { ...session, isNewAccount: Boolean(pair.is_new_account) };
-    } catch {
-      const fallbackSession: AuthSession = {
-        accessToken: `sms-session-${Date.now()}`,
-        refreshToken: `sms-refresh-${Date.now()}`,
-        expiresIn: 86400,
-        user: {
-          id: `usr_${Date.now()}`,
-          phone: phoneNumber,
-          full_name: role === "CLIENT" ? "Verified Client" : "Verified Worker",
-          mobile_number: phoneNumber,
-          role,
-        },
-      };
-      authSession.set(fallbackSession);
-      return { ...fallbackSession, isNewAccount: true };
-    }
+    const pair = await request<TokenPair & { is_new_account?: boolean }>("/auth/email-otp/verify", {
+      method: "POST",
+      body: JSON.stringify({
+        email: input.email,
+        otp: input.otp,
+        challenge_id: input.challengeId,
+        full_name: input.fullName,
+        mobile_number: input.mobileNumber,
+        transport: "browser",
+      }),
+    });
+    const session = sessionFromTokenPair(pair);
+    authSession.set(session);
+    return { ...session, isNewAccount: Boolean(pair.is_new_account) };
   },
 
   getProfile(): Promise<{
@@ -1102,24 +1041,24 @@ export const api = {
     }
   },
   clientEvidenceDownloadUrl(jobId: string, mediaId: string): Promise<{ url: string }> {
-    return request(
+    return request<{ url: string }>(
       `/client/jobs/${encodeURIComponent(jobId)}/evidence/${encodeURIComponent(mediaId)}/download`,
-    ).catch(() => ({ url: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=1200&q=80" }));
+    );
   },
   grantConsent(purpose: string): Promise<{ granted: boolean }> {
-    return request("/consent", { method: "POST", body: JSON.stringify({ purpose }) }).catch(() => ({ granted: true }));
+    return request<{ granted: boolean }>("/consent", { method: "POST", body: JSON.stringify({ purpose }) });
   },
   withdrawConsent(purpose: string): Promise<{ withdrawn: boolean }> {
-    return request("/consent/withdraw", { method: "POST", body: JSON.stringify({ purpose }) }).catch(() => ({ withdrawn: true }));
+    return request<{ withdrawn: boolean }>("/consent/withdraw", { method: "POST", body: JSON.stringify({ purpose }) });
   },
   deleteAccount(): Promise<{ deleted: boolean }> {
-    return request("/data/delete", { method: "POST" }).catch(() => ({ deleted: true }));
+    return request<{ deleted: boolean }>("/data/delete", { method: "POST" });
   },
   openDispute(jobId: string, reason: string): Promise<{ dispute_id: string }> {
-    return request("/disputes", {
+    return request<{ dispute_id: string }>("/disputes", {
       method: "POST",
       body: JSON.stringify({ job_id: jobId, reason }),
-    }).catch(() => ({ dispute_id: `dsp-${Date.now()}` }));
+    });
   },
   async cancelClientJob(
     jobId: string,
@@ -1151,9 +1090,7 @@ export const api = {
     latitude: number;
     longitude: number;
   }): Promise<{ updated_at: string }> {
-    return request("/worker/location", { method: "POST", body: JSON.stringify(input) }).catch(() => ({
-      updated_at: new Date().toISOString(),
-    }));
+    return request<{ updated_at: string }>("/worker/location", { method: "POST", body: JSON.stringify(input) });
   },
   async nearbyWorkerJobs(
     input: {
@@ -1384,16 +1321,8 @@ export const api = {
       return { success: true };
     }
   },
-  workerJobs(): Promise<{
-    events: SyncEvent[];
-    jobs: WorkerJobDetail[];
-    snapshot_jobs: WorkerJobDetail[];
-    ledger_entries: unknown[];
-    removed_job_ids: string[];
-    has_more: boolean;
-    next_cursor: string;
-  }> {
-    return request("/worker/sync?cursor=0&limit=100").catch(() => {
+  workerJobs(): Promise<WorkerSyncResult> {
+    return request<WorkerSyncResult>("/worker/sync?cursor=0&limit=100").catch(() => {
       const items = localStore.load().map((i): WorkerJobDetail => ({
         id: i.job.id,
         title: i.job.title,

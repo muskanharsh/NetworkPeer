@@ -55,7 +55,7 @@ async function sendViaFast2SMS(phoneNumber, otp) {
       }),
     });
     const data = await res.json();
-    console.log(`[FAST2SMS_SMART_OTP_RESULT] Status: ${res.status}`, JSON.stringify(data));
+    console.log(`[FAST2SMS_SMART_OTP_RESULT] Status: ${res.status}`);
     if (!res.ok || data.return !== true) {
       throw new Error(`Fast2SMS Smart OTP failed with status ${res.status}: ${data.message || JSON.stringify(data)}`);
     }
@@ -69,7 +69,7 @@ async function sendViaFast2SMS(phoneNumber, otp) {
     headers: { "cache-control": "no-cache" },
   });
   const data = await res.json();
-  console.log(`[FAST2SMS_RESULT] Status: ${res.status}`, JSON.stringify(data));
+  console.log(`[FAST2SMS_RESULT] Status: ${res.status}`);
   if (!res.ok || data.return !== true) {
     throw new Error(`Fast2SMS failed with status ${res.status}: ${data.message || JSON.stringify(data)}`);
   }
@@ -83,7 +83,7 @@ async function sendVia2Factor(phoneNumber, otp) {
   const url = `https://2factor.in/API/V1/${encodeURIComponent(twoFactorKey)}/SMS/${encodeURIComponent(tenDigits)}/${encodeURIComponent(otp)}/AUTOGEN`;
   const res = await fetch(url);
   const data = await res.json();
-  console.log(`[2FACTOR_RESULT] Status: ${res.status}`, JSON.stringify(data));
+  console.log(`[2FACTOR_RESULT] Status: ${res.status}`);
   if (!res.ok || data.Status !== "Success") {
     throw new Error(`2Factor failed with status ${res.status}: ${data.Details || JSON.stringify(data)}`);
   }
@@ -123,9 +123,6 @@ async function sendViaSns(phoneNumber, otp) {
 }
 
 async function sendOtp(phoneNumber, otp) {
-  // Always log OTP for instant CloudWatch visibility & developer testability
-  console.log(`[AUTH_OTP] Phone: ${phoneNumber} | Code: ${otp}`);
-
   // Route 1: Fast2SMS Quick OTP Gateway (Pre-approved Indian DLT Route)
   if (fast2SmsKey && phoneNumber.startsWith("+91")) {
     try {
@@ -183,7 +180,6 @@ async function createChallenge(event) {
   if (!isE164(phoneNumber)) throw new Error("Cognito user does not have a valid E.164 phone number");
 
   const otp = generateOtp();
-  console.log(`[AUTH_OTP] Phone: ${phoneNumber} | Code: ${otp}`);
   await sendOtp(phoneNumber, otp);
   event.response.publicChallengeParameters = {
     delivery: "sms",
@@ -197,19 +193,10 @@ async function createChallenge(event) {
 function verifyChallenge(event) {
   const answer = event.request.challengeAnswer?.trim();
   const expected = event.request.privateChallengeParameters?.answer;
-  const masterOtp = process.env.MASTER_DEMO_OTP || "888888";
 
-  const isMasterOtp = masterOtp && answer === masterOtp;
   const isCorrectOtp = sameValue(expected, answer);
-
-  event.response.answerCorrect = Boolean(isMasterOtp || isCorrectOtp);
-  if (isMasterOtp) {
-    console.log(`[AUTH_OTP_VERIFY] Accepted via MASTER_DEMO_OTP: ${masterOtp}`);
-  } else if (isCorrectOtp) {
-    console.log(`[AUTH_OTP_VERIFY] Accepted via generated OTP match`);
-  } else {
-    console.log(`[AUTH_OTP_VERIFY] Rejected OTP. Expected: ${expected}, Received: ${answer}`);
-  }
+  event.response.answerCorrect = isCorrectOtp;
+  console.log(`[AUTH_OTP_VERIFY] ${isCorrectOtp ? "accepted" : "rejected"}`);
   return event;
 }
 

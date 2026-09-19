@@ -134,6 +134,7 @@ GRANT SELECT ON users, worker_profiles, jobs, wallet_ledger, admin_audit_log TO 
 GRANT EXECUTE ON FUNCTION admin_override_job(UUID, UUID, VARCHAR, job_status, UUID, TEXT, TEXT) TO networkpeer_admin_api;
 GRANT EXECUTE ON FUNCTION admin_set_worker_verification(UUID, UUID, VARCHAR, BOOLEAN, TEXT) TO networkpeer_admin_api;
 GRANT EXECUTE ON FUNCTION admin_suspend_user(UUID, UUID, TEXT) TO networkpeer_admin_api;
+GRANT EXECUTE ON FUNCTION refund_client_job(UUID, UUID, TEXT, VARCHAR, CHAR(64)) TO networkpeer_admin_api;
 
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM networkpeer_media_verifier;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM networkpeer_media_verifier;

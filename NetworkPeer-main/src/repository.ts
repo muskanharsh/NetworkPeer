@@ -1984,6 +1984,50 @@ export async function adminOverrideJob(input: AdminJobOverrideInput): Promise<{
   return { auditId: String(row["audit_id"]), job };
 }
 
+export type RefundClientJobInput = {
+  actorUserId: string;
+  jobId: string;
+  reason: string;
+  idempotencyKey: string;
+  idempotencyFingerprint: string;
+};
+
+export type RefundClientJobResult = {
+  auditId: string;
+  refundLedgerTransactionId: string;
+  refundedAmountCents: number;
+  currency: string;
+  job: Job;
+};
+
+export async function refundClientJob(input: RefundClientJobInput): Promise<RefundClientJobResult> {
+  const { rows } = await adminPool.query<Row>(
+    `
+      SELECT audit_id, job_id, status, escrow_status,
+             refund_ledger_transaction_id, refunded_amount_cents, currency
+      FROM refund_client_job($1, $2, $3, $4::varchar, $5::char(64))
+    `,
+    [
+      input.actorUserId,
+      input.jobId,
+      input.reason,
+      input.idempotencyKey,
+      input.idempotencyFingerprint,
+    ],
+  );
+  const row = rows[0];
+  if (!row) throw new Error("Escrow refund did not return a result");
+  const job = await getJobById(input.jobId);
+  if (!job) throw new Error("Escrow refund removed the job unexpectedly");
+  return {
+    auditId: String(row["audit_id"]),
+    refundLedgerTransactionId: String(row["refund_ledger_transaction_id"]),
+    refundedAmountCents: Number(row["refunded_amount_cents"]),
+    currency: String(row["currency"]),
+    job,
+  };
+}
+
 export async function adminSuspendUser(input: {
   actorUserId: string;
   userId: string;
